@@ -1,0 +1,32 @@
+[package]
+name = "display-daemon"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "display_daemon"
+path = "src/lib.rs"
+
+[[bin]]
+name = "displayd"
+path = "src/main.rs"
+
+[dependencies]
+display-api.workspace = true
+display-core.workspace = true
+chrono.workspace = true
+display-ddc.workspace = true
+libc.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+display-macos.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

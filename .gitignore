@@ -1,0 +1,20 @@
+# Secrets — signing / notarization credentials. Never commit.
+.env
+.env.*
+!.env.example
+
+# Rust build output
+/target
+
+# macOS
+.DS_Store
+*.icns
+
+# Editor
+*.swp
+
+# Local agent / tool state
+.claude/
+
+# Internal dev notes (kept local, not published)
+docs/

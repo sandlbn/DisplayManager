@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  LaunchAgent for displayd. @TOKENS@ are substituted by build-pkg.sh.
+
+  A per-user Agent, not a system Daemon: displayd owns one user's I2C access and
+  must never be shared between login sessions. It talks to a socket under the
+  user's Application Support, so running it as root would put the socket in the
+  wrong place and break every client.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>@BUNDLE_ID@</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>@INSTALL_PREFIX@/displayd</string>
+    </array>
+
+    <!-- Start at login and restart if it crashes. -->
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+
+    <!-- Back off rather than hammer a crash loop. -->
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <key>StandardOutPath</key>
+    <string>@LOG_DIR@/displayd.log</string>
+    <key>StandardErrorPath</key>
+    <string>@LOG_DIR@/displayd.err.log</string>
+
+    <key>ProcessType</key>
+    <string>Interactive</string>
+</dict>
+</plist>

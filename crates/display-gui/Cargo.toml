@@ -1,0 +1,45 @@
+[package]
+name = "display-gui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "display-gui"
+path = "src/main.rs"
+
+[dependencies]
+display-api.workspace = true
+display-ddc.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+dirs.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSString", "NSThread", "NSNotification", "NSRunLoop", "NSTimer", "NSDate"] }
+objc2-app-kit = { version = "0.3", features = [
+    "NSApplication",
+    "NSStatusBar",
+    "NSStatusItem",
+    "NSStatusBarButton",
+    "NSButton",
+    "NSControl",
+    "NSMenu",
+    "NSMenuItem",
+    "NSSlider",
+    "NSView",
+    "NSResponder",
+    "NSText",
+    "NSTextField",
+    "NSWindow",
+    "NSImage",
+    "NSApplication",
+    "NSTabView",
+    "NSTabViewItem",
+    "NSScrollView",
+    "NSFont",
+    "NSAlert",
+] }

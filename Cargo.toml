@@ -1,0 +1,39 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/display-api",
+    "crates/display-core",
+    "crates/display-daemon",
+    "crates/display-gui",
+    "crates/display-ddc",
+    "crates/display-macos",
+    "crates/display-probe",
+    "crates/displayctl",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+rust-version = "1.85"
+
+[workspace.dependencies]
+display-api = { path = "crates/display-api" }
+display-core = { path = "crates/display-core" }
+display-daemon = { path = "crates/display-daemon" }
+display-ddc = { path = "crates/display-ddc" }
+display-macos = { path = "crates/display-macos" }
+
+core-foundation = "0.10"
+core-foundation-sys = "0.8"
+libc = "0.2"
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.9"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+clap = { version = "4", features = ["derive"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "net", "io-util", "sync", "signal", "time"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+dirs = "6"

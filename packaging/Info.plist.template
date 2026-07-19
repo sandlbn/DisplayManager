@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- @VERSION@ is substituted by build-app.sh. -->
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>Display Studio</string>
+    <key>CFBundleDisplayName</key>
+    <string>Display Studio</string>
+    <key>CFBundleIdentifier</key>
+    <string>io.github.displaymanager</string>
+    <key>CFBundleExecutable</key>
+    <string>display-gui</string>
+    <key>CFBundleShortVersionString</key>
+    <string>@VERSION@</string>
+    <key>CFBundleVersion</key>
+    <string>@VERSION@</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+
+    <!-- Menu-bar accessory: no Dock icon, no default menu. Matches the app's
+         runtime NSApplicationActivationPolicy::Accessory. -->
+    <key>LSUIElement</key>
+    <true/>
+
+    <key>NSHumanReadableCopyright</key>
+    <string>MIT / Apache-2.0</string>
+</dict>
+</plist>

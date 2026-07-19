@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+      Intentionally minimal.
+
+      displayd/displayctl reach the displays through Apple-signed system
+      frameworks (CoreDisplay's IOAVService, DisplayServices) loaded at runtime
+      via dlopen. Under the hardened runtime, dlopen of an Apple-signed library
+      is permitted without any entitlement, and IOKit I2C access is not gated by
+      the sandbox — so this is a Developer ID tool with hardened runtime and no
+      entitlements, deliberately not a sandboxed / App Store build.
+
+      Do NOT add com.apple.security.cs.disable-library-validation here: the
+      frameworks we load are Apple-signed and pass validation as-is, and
+      disabling it only weakens the runtime.
+
+      When the GUI lands and wants to intercept media keys, CGEventTap needs the
+      Accessibility *permission* (granted by the user in System Settings), which
+      is a TCC prompt at runtime — not a codesign entitlement — so it does not
+      belong in this file either.
+    -->
+</dict>
+</plist>

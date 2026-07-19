@@ -1,0 +1,23 @@
+[package]
+name = "displayctl"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "displayctl"
+path = "src/main.rs"
+
+[dependencies]
+display-api.workspace = true
+display-core.workspace = true
+display-daemon.workspace = true
+display-ddc.workspace = true
+toml.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+display-macos.workspace = true

@@ -1,0 +1,16 @@
+[package]
+name = "display-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+display-ddc.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+toml.workspace = true
+dirs.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
