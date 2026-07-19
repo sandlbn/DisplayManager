@@ -121,6 +121,12 @@ pub fn open(mtm: MainThreadMarker, handler: &Handler) {
                 false,
             )
         };
+        // We keep our own `Retained<NSWindow>` in WINDOW, so the window must NOT
+        // release itself on close (its default). Otherwise closing it frees the
+        // window while our reference dangles, and the next timer tick that calls
+        // `isVisible()` on it crashes the app with a trace trap. With this off,
+        // closing merely hides the window and reopening re-shows the same one.
+        unsafe { window.setReleasedWhenClosed(false) };
         window.setTitle(&NSString::from_str("Display Studio"));
         window.center();
         window.setContentView(Some(&content));

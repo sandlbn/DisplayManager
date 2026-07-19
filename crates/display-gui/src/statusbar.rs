@@ -12,8 +12,9 @@ use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
 use objc2::{define_class, msg_send, sel, DeclaredClass, MainThreadOnly};
 use objc2_app_kit::{
-    NSApplication, NSApplicationActivationPolicy, NSImage, NSMenu, NSMenuDelegate, NSMenuItem,
-    NSSlider, NSStatusBar, NSStatusItem, NSVariableStatusItemLength, NSView,
+    NSApplication, NSApplicationActivationPolicy, NSApplicationDelegate, NSImage, NSMenu,
+    NSMenuDelegate, NSMenuItem, NSSlider, NSStatusBar, NSStatusItem, NSVariableStatusItemLength,
+    NSView,
 };
 use objc2_foundation::{MainThreadMarker, NSObjectProtocol, NSPoint, NSRect, NSSize, NSString};
 use std::cell::RefCell;
@@ -91,6 +92,17 @@ define_class!(
     pub struct Handler;
 
     unsafe impl NSObjectProtocol for Handler {}
+
+    unsafe impl NSApplicationDelegate for Handler {
+        // Keep running when the settings window is closed — this is a menu bar
+        // app, so the status item is the app, not any window. Without this,
+        // AppKit terminates on last-window-closed and the whole app quits when
+        // settings closes.
+        #[unsafe(method(applicationShouldTerminateAfterLastWindowClosed:))]
+        fn should_terminate_after_last_window(&self, _app: &NSApplication) -> bool {
+            false
+        }
+    }
 
     unsafe impl NSMenuDelegate for Handler {
         // Rebuild from the cached snapshot just before the menu opens, and nudge
@@ -574,6 +586,9 @@ pub fn run() {
 
     let handler = Handler::new(mtm);
     handler.install(mtm);
+
+    // App delegate: keeps the app alive when the settings window is closed.
+    app.setDelegate(Some(objc2::runtime::ProtocolObject::from_ref(&*handler)));
 
     // Repeating timer to live-refresh the settings window when the background
     // snapshot changes. Cheap: it early-returns unless settings is open and the
