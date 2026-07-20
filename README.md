@@ -14,14 +14,16 @@ Written in Rust. Apple Silicon, macOS 13+.
 
 - DDC/CI control of external displays: brightness, contrast, volume, input
   switching, colour presets, screen orientation, power, and raw VCP codes.
-- Built-in panel brightness.
+- Built-in panel brightness and backlight off/on.
 - Menu bar app: per-monitor sliders and pickers, power off/on, profiles.
+- Keyboard brightness keys control the external display under the cursor.
+- Controls a monitor advertises but ignores are detected and disabled.
 - Per-monitor customisation of which controls appear.
 - Profiles: named snapshots of settings, saved and applied.
 - Automation rules: react to display connect/disconnect, power source, or time.
 - `displayctl` command-line tool with `--json` output.
 - Capability report per monitor.
-- Optional read-back verification of writes.
+- Read-back verification of writes.
 
 ## Components
 

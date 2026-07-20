@@ -19,6 +19,7 @@ fn main() {
 mod client;
 mod config;
 mod login;
+mod mediakeys;
 #[cfg(target_os = "macos")]
 mod settings;
 mod statusbar;

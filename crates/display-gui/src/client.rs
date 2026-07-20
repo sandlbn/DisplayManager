@@ -26,6 +26,9 @@ pub struct SliderView {
     pub code: u8,
     pub current: u16,
     pub max: u16,
+    /// False if the monitor was detected to ignore writes to this code — the
+    /// slider is shown greyed-out rather than pretending to work.
+    pub enabled: bool,
 }
 
 /// An enumerated control offered as a submenu (Input, Color Preset, …).
@@ -180,6 +183,9 @@ type Config = Arc<Mutex<crate::config::GuiConfig>>;
 
 fn worker_loop(rx: Receiver<Cmd>, snapshot: Arc<Mutex<Snapshot>>, config: Config) {
     let mut client: Option<Client> = None;
+    // (key, code) pairs confirmed to honour writes this session, so a working
+    // control is verified once and then written without the extra read-back.
+    let mut checked: std::collections::HashSet<(String, u8)> = std::collections::HashSet::new();
     refresh(&mut client, &snapshot, &config);
 
     loop {
@@ -193,7 +199,8 @@ fn worker_loop(rx: Receiver<Cmd>, snapshot: Arc<Mutex<Snapshot>>, config: Config
                 while let Ok(c) = rx.try_recv() {
                     batch.push(c);
                 }
-                if process_batch(batch, &mut client, &snapshot, &config).disconnected {
+                if process_batch(batch, &mut client, &snapshot, &config, &mut checked).disconnected
+                {
                     return;
                 }
             }
@@ -218,6 +225,7 @@ fn process_batch(
     client: &mut Option<Client>,
     snapshot: &Arc<Mutex<Snapshot>>,
     config: &Config,
+    checked: &mut std::collections::HashSet<(String, u8)>,
 ) -> BatchOutcome {
     // Latest value per (display, code), preserving first-seen order.
     let mut sets: Vec<(String, u8, u16)> = Vec::new();
@@ -273,18 +281,56 @@ fn process_batch(
         }
     }
 
+    let mut ignored_changed = false;
     for (display, code, value) in sets {
-        if let Some(c) = ensure(client) {
-            let _ = c.set(&display, &format!("0x{code:02X}"), value, false);
+        let key = display_key(snapshot, &display);
+        // Verify until a control is confirmed to honour writes, then stop (so a
+        // working slider is fast). Ignored controls stay unverified-as-working,
+        // so a later drag can re-check and recover if the display was just asleep.
+        let already_ok = key
+            .as_ref()
+            .is_some_and(|k| checked.contains(&(k.clone(), code)));
+        let verify = !already_ok;
+
+        let Some(c) = ensure(client) else { continue };
+        let result = c.set(&display, &format!("0x{code:02X}"), value, verify);
+
+        if verify {
+            if let (Ok(r), Some(key)) = (result, key) {
+                let honored = r.ignored.is_empty();
+                let mut cfg = config.lock().unwrap();
+                let changed = cfg.is_ignored(&key, code) != !honored;
+                cfg.set_ignored(&key, code, !honored);
+                drop(cfg);
+                if changed {
+                    ignored_changed = true;
+                }
+                if honored {
+                    checked.insert((key, code));
+                }
+            }
         }
     }
 
-    if needs_refresh {
+    // Rebuild if a control's ignored state flipped, so its slider greys/ungreys.
+    if needs_refresh || ignored_changed {
         refresh(client, snapshot, config);
     }
     BatchOutcome {
         disconnected: false,
     }
+}
+
+/// The stable settings key for a display selector (id), from the snapshot.
+fn display_key(snapshot: &Arc<Mutex<Snapshot>>, selector: &str) -> Option<String> {
+    let id: u32 = selector.parse().ok()?;
+    snapshot
+        .lock()
+        .unwrap()
+        .monitors
+        .iter()
+        .find(|m| m.id == id)
+        .map(|m| m.key.clone())
 }
 
 /// Connect if needed; returns None if the daemon is unreachable.
@@ -498,16 +544,18 @@ fn refresh(client: &mut Option<Client>, snapshot: &Arc<Mutex<Snapshot>>, config:
             }
         };
 
-        // Read each visible code.
+        // Read each visible code. A code detected as ignored is shown greyed.
         let mut sliders = Vec::new();
         for code in &codes {
             if let Ok(v) = c.get(&selector, &format!("0x{code:02X}")) {
                 if v.max > 0 && v.max <= 1000 {
+                    let enabled = !config.lock().unwrap().is_ignored(&m.key, *code);
                     sliders.push(SliderView {
                         label: display_ddc::vcp::VcpCode::from_code(*code).display_name(),
                         code: *code,
                         current: v.current,
                         max: v.max,
+                        enabled,
                     });
                 }
             }

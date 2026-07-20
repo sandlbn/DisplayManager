@@ -49,8 +49,19 @@ enum Action {
         code: u8,
         value: u8,
     },
+    /// Built-in panel "off": set the backlight (brightness) to 0, remembering
+    /// the prior value. There is no public per-panel DPMS power for the internal
+    /// LCD, so backlight-off is the practical equivalent.
+    BacklightOff {
+        display: String,
+    },
+    /// Built-in panel "on": restore the remembered brightness.
+    BacklightOn {
+        display: String,
+    },
     ApplyProfile(String),
     OpenSettings,
+    About,
     Quit,
 }
 
@@ -82,6 +93,9 @@ pub struct HandlerIvars {
     /// Snapshot generation the settings window was last built at, so a timer can
     /// rebuild it only when something it shows actually changed.
     settings_gen: RefCell<u64>,
+    /// Brightness to restore when turning a built-in panel's backlight back on,
+    /// keyed by display selector.
+    backlight_restore: RefCell<std::collections::HashMap<String, u16>>,
 }
 
 define_class!(
@@ -220,6 +234,7 @@ impl Handler {
             actions: RefCell::new(Vec::new()),
             settings_actions: RefCell::new(Vec::new()),
             settings_gen: RefCell::new(0),
+            backlight_restore: RefCell::new(std::collections::HashMap::new()),
         });
         unsafe { msg_send![super(this), init] }
     }
@@ -252,9 +267,41 @@ impl Handler {
                 code,
                 value: value as u16,
             }),
+            // Built-in panel: no DPMS power, so "off" is backlight to 0. Stash
+            // the current brightness first so "on" restores it.
+            Some(Action::BacklightOff { display }) => {
+                if let Some(cur) = self.builtin_brightness(&display) {
+                    if cur > 0 {
+                        self.ivars()
+                            .backlight_restore
+                            .borrow_mut()
+                            .insert(display.clone(), cur);
+                    }
+                }
+                worker.post(Cmd::Set {
+                    display,
+                    code: 0x10,
+                    value: 0,
+                });
+            }
+            Some(Action::BacklightOn { display }) => {
+                let value = self
+                    .ivars()
+                    .backlight_restore
+                    .borrow()
+                    .get(&display)
+                    .copied()
+                    .unwrap_or(60);
+                worker.post(Cmd::Set {
+                    display,
+                    code: 0x10,
+                    value,
+                });
+            }
             Some(Action::OpenSettings) => {
                 crate::settings::open(MainThreadMarker::new().unwrap(), self)
             }
+            Some(Action::About) => self.show_about(),
             Some(Action::Quit) => {
                 let mtm = MainThreadMarker::new().unwrap();
                 NSApplication::sharedApplication(mtm).terminate(None);
@@ -262,6 +309,77 @@ impl Handler {
             // SetVcp is driven by sliderChanged:, not by a menu click.
             Some(Action::SetVcp { .. }) | None => {}
         }
+    }
+
+    /// Adjust the brightness of the external display under the cursor, in
+    /// response to a keyboard brightness key. Returns true if it handled the key
+    /// (so the tap swallows it); false to let macOS handle it (built-in panel or
+    /// a display we do not drive).
+    pub fn media_brightness(&self, up: bool) -> bool {
+        let Some(id) = crate::mediakeys::display_under_cursor() else {
+            return false;
+        };
+        let snap = self.ivars().worker.snapshot();
+        let Some(m) = snap.monitors.iter().find(|m| m.id == id) else {
+            return false;
+        };
+        // Built-in brightness is handled natively by macOS — let the key pass.
+        if !m.is_ddc {
+            return false;
+        }
+        let Some(s) = m.sliders.iter().find(|s| s.code == 0x10) else {
+            return false; // brightness not readable / hidden — don't swallow
+        };
+        // ~16 steps across the range, matching macOS's brightness granularity.
+        let step = (s.max as i32 / 16).max(1);
+        let delta = if up { step } else { -step };
+        let new = (s.current as i32 + delta).clamp(0, s.max as i32) as u16;
+        self.ivars().worker.post(Cmd::Set {
+            display: id.to_string(),
+            code: 0x10,
+            value: new,
+        });
+        true
+    }
+
+    /// Show the native About panel, crediting the author.
+    fn show_about(&self) {
+        use objc2_app_kit::NSApplicationActivationPolicy;
+        use objc2_foundation::{NSDictionary, NSString};
+
+        let mtm = MainThreadMarker::new().unwrap();
+        let app = NSApplication::sharedApplication(mtm);
+
+        // Options for the standard about panel: name, version, and a credits
+        // line with the author. Keys are the documented NSAboutPanelOption raw
+        // strings.
+        let version = NSString::from_str(env!("CARGO_PKG_VERSION"));
+        let credits = objc2_foundation::NSAttributedString::from_nsstring(&NSString::from_str(
+            "Created by Marcin Spoczynski",
+        ));
+        let keys = [
+            NSString::from_str("ApplicationName"),
+            NSString::from_str("ApplicationVersion"),
+            NSString::from_str("Credits"),
+        ];
+        let name = NSString::from_str("Display Studio");
+        let vals: [&objc2::runtime::AnyObject; 3] = [&name, &version, &credits];
+        let key_refs: [&NSString; 3] = [&keys[0], &keys[1], &keys[2]];
+        let options = NSDictionary::from_slices(&key_refs, &vals);
+
+        // Bring the app forward so the panel is visible for an accessory app.
+        app.setActivationPolicy(NSApplicationActivationPolicy::Regular);
+        app.activate();
+        unsafe { app.orderFrontStandardAboutPanelWithOptions(&options) };
+        app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
+    }
+
+    /// Current brightness of a display from the cached snapshot (VCP 0x10).
+    fn builtin_brightness(&self, selector: &str) -> Option<u16> {
+        let id: u32 = selector.parse().ok()?;
+        let snap = self.ivars().worker.snapshot();
+        let m = snap.monitors.iter().find(|m| m.id == id)?;
+        m.sliders.iter().find(|s| s.code == 0x10).map(|s| s.current)
     }
 
     /// Current cached snapshot, for the settings window.
@@ -362,6 +480,8 @@ impl Handler {
         menu.addItem(&NSMenuItem::separatorItem(mtm));
         let settings = self.action_item(mtm, "Settings…", Action::OpenSettings, "");
         menu.addItem(&settings);
+        let about = self.action_item(mtm, "About Display Studio", Action::About, "");
+        menu.addItem(&about);
         let quit = self.action_item(mtm, "Quit Display Studio", Action::Quit, "q");
         menu.addItem(&quit);
     }
@@ -394,7 +514,7 @@ impl Handler {
                 display: selector.clone(),
                 code: s.code,
             });
-            let item = self.slider_item(mtm, &s.label, s.current, s.max, tag);
+            let item = self.slider_item(mtm, &s.label, s.current, s.max, tag, s.enabled);
             menu.addItem(&item);
         }
 
@@ -428,6 +548,26 @@ impl Handler {
             for picker in &m.pickers {
                 self.add_picker_submenu(mtm, menu, picker, &selector);
             }
+        } else {
+            // Built-in panel: backlight off/on (no true DPMS power available).
+            let off = self.action_item(
+                mtm,
+                "⏻  Off",
+                Action::BacklightOff {
+                    display: selector.clone(),
+                },
+                "",
+            );
+            menu.addItem(&off);
+            let on = self.action_item(
+                mtm,
+                "☀  On",
+                Action::BacklightOn {
+                    display: selector.clone(),
+                },
+                "",
+            );
+            menu.addItem(&on);
         }
     }
 
@@ -516,6 +656,7 @@ impl Handler {
         current: u16,
         max: u16,
         tag: isize,
+        enabled: bool,
     ) -> Retained<NSMenuItem> {
         let item = NSMenuItem::new(mtm);
 
@@ -524,10 +665,17 @@ impl Handler {
         let view =
             unsafe { NSView::initWithFrame(NSView::alloc(mtm), rect(0.0, 0.0, width, height)) };
 
+        // A control the monitor ignores gets an "(unsupported)" hint so the grey
+        // slider is not mistaken for a bug.
+        let text = if enabled {
+            label.to_string()
+        } else {
+            format!("{label} (unsupported)")
+        };
         let label_field =
-            unsafe { objc2_app_kit::NSTextField::labelWithString(&NSString::from_str(label), mtm) };
+            unsafe { objc2_app_kit::NSTextField::labelWithString(&NSString::from_str(&text), mtm) };
         unsafe {
-            label_field.setFrame(rect(14.0, 2.0, 78.0, 18.0));
+            label_field.setFrame(rect(14.0, 2.0, 120.0, 18.0));
             view.addSubview(&label_field);
         }
 
@@ -543,6 +691,8 @@ impl Handler {
             s.setTarget(Some(self));
             s.setAction(Some(sel!(sliderChanged:)));
             s.setContinuous(true);
+            // Detected-ignored controls are shown greyed and non-interactive.
+            s.setEnabled(enabled);
             s
         };
         unsafe { view.addSubview(&slider) };
@@ -589,6 +739,9 @@ pub fn run() {
 
     // App delegate: keeps the app alive when the settings window is closed.
     app.setDelegate(Some(objc2::runtime::ProtocolObject::from_ref(&*handler)));
+
+    // Brightness-key interception (needs Accessibility permission).
+    crate::mediakeys::install(&handler);
 
     // Repeating timer to live-refresh the settings window when the background
     // snapshot changes. Cheap: it early-returns unless settings is open and the

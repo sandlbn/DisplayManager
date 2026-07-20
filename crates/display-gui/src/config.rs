@@ -22,6 +22,11 @@ pub struct GuiConfig {
     /// hex strings ("0x59") so the file stays readable.
     #[serde(default)]
     pub visible: BTreeMap<String, BTreeSet<String>>,
+    /// Per-display codes the monitor advertises but ignores writes to (detected
+    /// by read-back). Their sliders are shown greyed-out. Persisted so a known
+    /// dead control stays disabled across restarts.
+    #[serde(default)]
+    pub ignored: BTreeMap<String, BTreeSet<String>>,
 }
 
 fn code_key(code: u8) -> String {
@@ -82,6 +87,36 @@ impl GuiConfig {
             set.remove(&code_key(code));
         }
         self.save();
+    }
+
+    /// Whether a code was detected as ignored (write did not stick) for a display.
+    pub fn is_ignored(&self, key: &str, code: u8) -> bool {
+        self.ignored
+            .get(key)
+            .is_some_and(|s| s.contains(&code_key(code)))
+    }
+
+    /// Record whether a code is ignored, persisting only on an actual change so
+    /// a working control does not thrash the file on every write.
+    pub fn set_ignored(&mut self, key: &str, code: u8, ignored: bool) {
+        let changed = if ignored {
+            self.ignored
+                .entry(key.to_string())
+                .or_default()
+                .insert(code_key(code))
+        } else {
+            let removed = self
+                .ignored
+                .get_mut(key)
+                .is_some_and(|s| s.remove(&code_key(code)));
+            if self.ignored.get(key).is_some_and(|s| s.is_empty()) {
+                self.ignored.remove(key);
+            }
+            removed
+        };
+        if changed {
+            self.save();
+        }
     }
 }
 
